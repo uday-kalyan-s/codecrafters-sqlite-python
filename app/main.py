@@ -155,6 +155,43 @@ def get_pg_size():
 db_page_size = get_pg_size()
 # print(db_page_size)
 
+def search(query_table_name: str, query_col_names: str):
+    right_rec = None
+    for table in tables:
+        # print(table, query_table_name)
+        if table.table_name == query_table_name:
+            right_rec = table
+            break
+    def get_cols(sql_str: str):
+        parts = sql_str.split(',')
+        parts[0] = parts[0].split('(')[1]
+        parts[-1] = parts[-1].split(')')[0]
+        col_names = []
+        for part in parts:
+            part = part.strip()
+            words = part.split(' ')
+            col_names.append(words[0])
+        return col_names
+    col_names = get_cols(right_rec.sql)
+    # col_index = col_names.index(query_col_name)
+    col_indexes = [col_names.index(qcn) for qcn in query_col_names]
+    response = []
+    with open(database_file_path, "rb") as database_file:
+        page_offset = db_page_size*(right_rec.rootpg_num-1)
+        database_file.seek(page_offset)
+        # shift to right offset
+        database_file.seek(3, os.SEEK_CUR)
+        num_rows = read_big_endian(database_file, 2)
+        database_file.seek(page_offset+8)
+        cell_start_pos = []
+        for i in range(num_rows):
+            cell_start_pos.append(read_big_endian(database_file, 2))
+        for start_pos in cell_start_pos:
+            record = read_record(database_file, start_pos+page_offset)
+            # print(record.columns[col_index].col_value)
+            response.append([record.columns[col_index].col_value for col_index in col_indexes])
+    return response
+
 if command == ".dbinfo":
     with open(database_file_path, "rb") as database_file:
         # You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -189,38 +226,18 @@ elif "COUNT" in command or "count" in command:
         database_file.seek(3, os.SEEK_CUR)
         rows = read_big_endian(database_file, 2)
         print(rows)
+elif "," in command:
+    cmd_parts = command.split(' ')
+    query_table_name = cmd_parts[-1]
+    cmd_parts = cmd_parts[1:-2]
+    query_col_names = [x.replace(',', '').strip() for x in cmd_parts]
+    response = search(query_table_name, query_col_names)
+    for row in response:
+        print("|".join(row))
 else:
     cmd_parts = command.split(' ')
     query_col_name = cmd_parts[1]
     query_table_name = cmd_parts[3]
-    right_rec = None
-    for table in tables:
-        # print(table, query_table_name)
-        if table.table_name == query_table_name:
-            right_rec = table
-            break
-    def get_cols(sql_str: str):
-        parts = sql_str.split(',')
-        parts[0] = parts[0].split('(')[1]
-        parts[-1] = parts[-1].split(')')[0]
-        col_names = []
-        for part in parts:
-            part = part.strip()
-            words = part.split(' ')
-            col_names.append(words[0])
-        return col_names
-    col_names = get_cols(right_rec.sql)
-    col_index = col_names.index(query_col_name)
-    with open(database_file_path, "rb") as database_file:
-        page_offset = db_page_size*(right_rec.rootpg_num-1)
-        database_file.seek(page_offset)
-        # shift to right offset
-        database_file.seek(3, os.SEEK_CUR)
-        num_rows = read_big_endian(database_file, 2)
-        database_file.seek(page_offset+8)
-        cell_start_pos = []
-        for i in range(num_rows):
-            cell_start_pos.append(read_big_endian(database_file, 2))
-        for start_pos in cell_start_pos:
-            record = read_record(database_file, start_pos+page_offset)
-            print(record.columns[col_index].col_value)
+    response = search(query_table_name, [query_col_name])
+    for r in response:
+        print(r[0])
