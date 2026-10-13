@@ -92,6 +92,7 @@ elif command == '.tables':
         # print(cell_start_pos)
         for start_pos in cell_start_pos:
             record = get_record(database_file, start_pos)
+            print(record)
             print(record.table_name, end=" ")
     pass
 else:
