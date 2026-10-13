@@ -16,5 +16,12 @@ if command == ".dbinfo":
         database_file.seek(16)  # Skip the first 16 bytes of the header
         page_size = int.from_bytes(database_file.read(2), byteorder="big")
         print(f"database page size: {page_size}")
+
+        # get the number of tables (cells in page header)
+        # 100 for db header and +3 in that
+        database_file.seek(100+3)
+        count_offset = int.from_bytes(database_file.read(2), byteorder="big")
+        print(f"number of tables: {count_offset}")
+        
 else:
     print(f"Invalid command: {command}")
