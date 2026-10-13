@@ -9,6 +9,34 @@ import os
 database_file_path = sys.argv[1]
 command = sys.argv[2]
 
+@dataclass
+class Record:
+    record_size: int
+    row_id: int
+    header_size: int
+    type_val: int
+    name: str
+    table_name: str
+
+def get_record(database_file, start_pos: int):
+    database_file.seek(start_pos)
+    rec_size = get_varint(database_file)
+    row_id = get_varint(database_file)
+    # currently at header start
+    header_size = get_varint(database_file)
+    type_serial = get_varint(database_file)
+    type_size = get_size(type_serial)
+    name_serial = get_varint(database_file)
+    name_size = get_size(name_serial)
+    tbl_name_serial = get_varint(database_file)
+    tbl_name_size = get_size(tbl_name_serial)
+    _rootpg_serial = get_varint(database_file)
+    _sql_serial = get_varint(database_file)
+    type_text = database_file.read(type_size)
+    name_text = database_file.read(name_size).decode('utf-8')
+    table_name = database_file.read(tbl_name_size).decode('utf-8')
+    return Record(rec_size, row_id, header_size, type_text, name_text, table_name)
+
 def get_size(serial: int):
     if serial >= 12 and serial%2 == 0:
         return int((serial-12)/2)
@@ -63,26 +91,8 @@ elif command == '.tables':
             cell_start_pos.append(read_big_endian(database_file, 2))
         # print(cell_start_pos)
         for start_pos in cell_start_pos:
-            database_file.seek(start_pos)
-            rec_size = get_varint(database_file)
-            row_id = get_varint(database_file)
-            # currently at header start
-            header_size = get_varint(database_file)
-            serial_type = get_varint(database_file)
-            size_type = get_size(serial_type)
-            serial_name = get_varint(database_file)
-            size_name = get_size(serial_name)
-            serial_tbl_name = get_varint(database_file)
-            size_tbl_name = get_size(serial_tbl_name)
-            serial_rootpg = get_varint(database_file)
-            serial_sql = get_varint(database_file)
-            # at record body
-            database_file.seek(size_type, os.SEEK_CUR)
-            database_file.seek(size_name, os.SEEK_CUR)
-            # print(size_tbl_name, rec_size, row_id, header_size, serial_type)
-            table_name = database_file.read(size_tbl_name).decode('utf-8')
-            print(table_name, end=" ")
-            # break
+            record = get_record(database_file, start_pos)
+            print(record.table_name, end=" ")
     pass
 else:
     print(f"Invalid command: {command}")
