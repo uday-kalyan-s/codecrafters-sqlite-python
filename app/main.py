@@ -226,6 +226,22 @@ elif "COUNT" in command or "count" in command:
         database_file.seek(3, os.SEEK_CUR)
         rows = read_big_endian(database_file, 2)
         print(rows)
+elif "where" in command or "WHERE" in command:
+    cmd_parts = command.split(' ')
+    query_where_val = cmd_parts[-1].replace("'", '').strip()
+    query_where_col = cmd_parts[-3]
+    cmd_parts = cmd_parts[:-4]
+    query_table_name = cmd_parts[-1]
+    cmd_parts = cmd_parts[1:-2]
+    query_col_names = [x.replace(',', '').strip() for x in cmd_parts]
+    # print(query_col_names + [query_where_col])
+    response = search(query_table_name, query_col_names + [query_where_col])
+    # print(response)
+    response_filters = list(filter(lambda row: row[-1] == query_where_val, response))
+    response_filters = list(map(lambda row: row[:-1], response_filters))
+    # print(response_filters)
+    for row in response_filters:
+        print("|".join(row))
 elif "," in command:
     cmd_parts = command.split(' ')
     query_table_name = cmd_parts[-1]
