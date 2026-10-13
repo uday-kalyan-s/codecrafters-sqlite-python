@@ -17,6 +17,7 @@ class Record:
     type_val: int
     name: str
     table_name: str
+    rootpg_num: int
 
 def get_record(database_file, start_pos: int):
     database_file.seek(start_pos)
@@ -35,16 +36,24 @@ def get_record(database_file, start_pos: int):
     type_text = database_file.read(type_size)
     name_text = database_file.read(name_size).decode('utf-8')
     table_name = database_file.read(tbl_name_size).decode('utf-8')
-    return Record(rec_size, row_id, header_size, type_text, name_text, table_name)
+    rootpg_num = read_big_endian(database_file, 1)
 
-def get_size(serial: int):
-    if serial >= 12 and serial%2 == 0:
-        return int((serial-12)/2)
-    else: # TODO: rest of formats
-        return int((serial-13)/2)
+    return Record(rec_size, row_id, header_size, type_text, name_text, table_name, rootpg_num)
 
 def read_big_endian(database_file, size: int):
     return int.from_bytes(database_file.read(size), byteorder="big")
+
+def get_size(serial: int):
+    if serial <= 4:
+        return serial, 
+    elif 5 <= serial <= 7:
+        return serial+1
+    elif serial == 8 or serial == 9:
+        return 0
+    elif serial >= 12 and serial%2 == 0:
+        return int((serial-12)/2)
+    else:
+        return int((serial-13)/2)
 
 def get_varint(database_file):
     varint_res = 0
@@ -64,6 +73,33 @@ def get_varint(database_file):
     # print(varint_res)
     return varint_res
 
+def fetch_tables():
+    records = []
+    with open(database_file_path, "rb") as database_file:
+        database_file.seek(100+3)
+        table_count = read_big_endian(database_file, 2)
+        
+        database_file.seek(100+8)
+        cell_start_pos = []
+        # print(table_count)
+        for i in range(table_count):
+            cell_start_pos.append(read_big_endian(database_file, 2))
+        # print(cell_start_pos)
+        for start_pos in cell_start_pos:
+            record = get_record(database_file, start_pos)
+            records.append(record)
+    return records
+
+tables: list[Record] = fetch_tables()
+
+def get_pg_size():
+    with open(database_file_path, "rb") as database_file:
+        database_file.seek(16)
+        return read_big_endian(database_file, 2)
+
+db_page_size = get_pg_size()
+# print(db_page_size)
+
 if command == ".dbinfo":
     with open(database_file_path, "rb") as database_file:
         # You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -80,20 +116,21 @@ if command == ".dbinfo":
         table_count = read_big_endian(database_file, 2)
         print(f"number of tables: {table_count}")
 elif command == '.tables':
-    with open(database_file_path, "rb") as database_file:
-        database_file.seek(100+3)
-        table_count = read_big_endian(database_file, 2)
-        
-        database_file.seek(100+8)
-        cell_start_pos = []
-        # print(table_count)
-        for i in range(table_count):
-            cell_start_pos.append(read_big_endian(database_file, 2))
-        # print(cell_start_pos)
-        for start_pos in cell_start_pos:
-            record = get_record(database_file, start_pos)
-            print(record)
-            print(record.table_name, end=" ")
-    pass
+    for table in tables:
+        print(table.table_name, end=" ")
 else:
-    print(f"Invalid command: {command}")
+    # print(f"Invalid command: {command}")
+    query_table_name = command.split(' ')[-1]
+    right_rec = None
+    for table in tables:
+        # print(table, query_table_name)
+        if table.table_name == query_table_name:
+            right_rec = table
+            break
+    # print(right_rec)
+    with open(database_file_path, "rb") as database_file:
+        database_file.seek(db_page_size*(right_rec.rootpg_num-1))
+        # shift to right offset
+        database_file.seek(3, os.SEEK_CUR)
+        rows = read_big_endian(database_file, 2)
+        print(rows)
